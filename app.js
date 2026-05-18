@@ -1,268 +1,140 @@
-// CONFIGURAÇÃO DE LOGIN (Modifique aqui se quiser mudar o acesso)
-const CREDENTIALS = {
-    username: "admin",
-    password: "admin123"
-};
-
+const CREDENTIALS = { user: "admin", pass: "admin123" };
 let allVideos = [];
 let currentPlaylist = [];
-let currentVideoIndex = -1;
-let youtubePlayer = null;
-
-// Carrega a API do YouTube para rastrear o fim do vídeo de maneira nativa
-const tag = document.createElement('script');
-tag.src = "https://www.youtube.com/iframe_api";
-const firstScriptTag = document.getElementsByTagName('script')[0];
-firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+let currentIndex = -1;
 
 document.addEventListener("DOMContentLoaded", () => {
-    initLogin();
-    checkSession();
-});
+    // Menu Retrátil
+    const sidebar = document.getElementById("sidebar");
+    document.getElementById("toggle-menu").addEventListener("click", () => {
+        sidebar.classList.toggle("collapsed");
+    });
 
-// Lógica de Autenticação
-function initLogin() {
-    const loginForm = document.getElementById("login-form");
-    loginForm.addEventListener("submit", (e) => {
+    // Login
+    document.getElementById("login-form").addEventListener("submit", (e) => {
         e.preventDefault();
-        const userIn = document.getElementById("username").value;
-        const passIn = document.getElementById("password").value;
-
-        if(userIn === CREDENTIALS.username && passIn === CREDENTIALS.password) {
-            localStorage.setItem("logged_stream_session", "true");
-            checkSession();
-        } else {
-            document.getElementById("login-error").style.display = "block";
+        if(document.getElementById("username").value === CREDENTIALS.user && 
+           document.getElementById("password").value === CREDENTIALS.pass) {
+            localStorage.setItem("session", "true");
+            initApp();
         }
     });
 
+    if(localStorage.getItem("session") === "true") initApp();
+    
     document.getElementById("btn-logout").addEventListener("click", () => {
-        localStorage.removeItem("logged_stream_session");
+        localStorage.clear();
         location.reload();
     });
+});
+
+async function initApp() {
+    document.getElementById("login-screen").classList.add("hidden");
+    document.getElementById("main-content").classList.remove("hidden");
+    
+    const res = await fetch('videos.json');
+    allVideos = await res.json();
+    
+    buildSidebar(allVideos);
+    renderGrid(allVideos);
+    setupModal();
 }
 
-function checkSession() {
-    const isLogged = localStorage.getItem("logged_stream_session");
-    if(isLogged === "true") {
-        document.getElementById("login-screen").classList.add("hidden");
-        document.getElementById("main-content").classList.remove("hidden");
-        loadDatabase();
-    }
-}
-
-// Busca o JSON e monta a árvore de categorias
-async function loadDatabase() {
-    try {
-        const response = await fetch('videos.json');
-        allVideos = await response.json();
-        
-        buildMenu(allVideos);
-        renderPlaylists(allVideos);
-        initPlayerEvents();
-    } catch (error) {
-        console.error("Erro ao carregar os dados JSON:", error);
-    }
-}
-
-// Agrupa e renderiza o Menu Lateral (Categorias > Subcategorias)
-function buildMenu(videos) {
-    const menuNav = document.getElementById("sidebar-menu");
-    menuNav.innerHTML = "";
-
-    // Mapeamento hierárquico
-    const structure = {};
-    videos.forEach(v => {
-        if(!structure[v.categoria]) structure[v.categoria] = new Set();
-        if(v.subcategoria) structure[v.categoria].add(v.subcategoria);
-    });
-
-    // Item para resetar filtro / Ver tudo
-    const allItem = document.createElement("div");
-    allItem.className = "menu-category";
-    allItem.innerHTML = `<span class="category-title-link"><i class="fa-solid fa-house"></i> Ver Tudo</span>`;
-    allItem.addEventListener("click", () => renderPlaylists(videos, "Todos os Vídeos"));
-    menuNav.appendChild(allItem);
-
-    // Renderiza categorias e subcategorias no menu
-    for(let cat in structure) {
-        const catBox = document.createElement("div");
-        catBox.className = "menu-category";
-        
-        const catTitle = document.createElement("span");
-        catTitle.className = "category-title-link";
-        catTitle.innerHTML = `<i class="fa-solid fa-folder"></i> ${cat}`;
-        catTitle.addEventListener("click", () => {
-            const filtered = videos.filter(v => v.categoria === cat);
-            renderPlaylists(filtered, cat);
+function buildSidebar(videos) {
+    const menu = document.getElementById("sidebar-menu");
+    const cats = [...new Set(videos.map(v => v.categoria))];
+    
+    menu.innerHTML = `<div class="category-title-link" onclick="renderGrid(allVideos, 'Início')"><i class="fa-solid fa-house"></i> <span>Início</span></div>`;
+    
+    cats.forEach(cat => {
+        const subCats = [...new Set(videos.filter(v => v.categoria === cat).map(v => v.subcategoria))];
+        let html = `<div class="category-title-link" onclick="filterCat('${cat}')"><i class="fa-solid fa-folder"></i> <span>${cat}</span></div>`;
+        html += `<ul class="subcategory-list">`;
+        subCats.forEach(sub => {
+            html += `<li onclick="filterSub('${cat}', '${sub}')">${sub}</li>`;
         });
-        catBox.appendChild(catTitle);
-
-        if(structure[cat].size > 0) {
-            const subList = document.createElement("ul");
-            subList.className = "subcategory-list";
-            
-            structure[cat].forEach(sub => {
-                const subItem = document.createElement("li");
-                subItem.innerText = sub;
-                subItem.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    const filtered = videos.filter(v => v.categoria === cat && v.subcategoria === sub);
-                    renderPlaylists(filtered, `${cat} > ${sub}`);
-                });
-                subList.appendChild(subItem);
-            });
-            catBox.appendChild(subList);
-        }
-        menuNav.appendChild(catBox);
-    }
+        html += `</ul>`;
+        menu.innerHTML += html;
+    });
 }
 
-// Renderiza as playlists organizadas em blocos expansíveis
-function renderPlaylists(videosToShow, title = "Todos os Vídeos") {
+function renderGrid(videos, title = "Vídeos") {
     document.getElementById("current-view-title").innerText = title;
     const grid = document.getElementById("categories-grid");
     grid.innerHTML = "";
 
-    // Agrupar itens por Categoria + Subcategoria para formar as playlists organizadas
-    const grouped = {};
-    videosToShow.forEach(v => {
-        const key = `${v.categoria} ${v.subcategoria ? ' > ' + v.subcategoria : ''}`;
-        if(!grouped[key]) grouped[key] = [];
-        grouped[key].push(v);
+    const groups = {};
+    videos.forEach(v => {
+        const k = `${v.categoria} - ${v.subcategoria}`;
+        if(!groups[k]) groups[k] = [];
+        groups[k].push(v);
     });
 
-    for(let playlistName in grouped) {
-        const listVideos = grouped[playlistName];
-        const firstVideo = listVideos[0];
-
+    for(let key in groups) {
+        const vids = groups[key];
         const row = document.createElement("div");
         row.className = "playlist-row";
-
-        // Cabeçalho da playlist (Capa é o primeiro vídeo da lista)
         row.innerHTML = `
-            <div class="playlist-header" data-expanded="false">
-                <img class="playlist-cover-preview" src="${firstVideo.capa}" alt="Capa">
-                <div class="playlist-info">
-                    <h2>${playlistName}</h2>
-                    <p>${listVideos.length} vídeo(s) nesta lista — <span class="action-text" style="color:var(--accent-color);">Clique para expandir</span></p>
-                </div>
+            <div class="playlist-header">
+                <img src="${vids[0].capa}" class="playlist-cover-preview">
+                <div><h2>${key}</h2><p>${vids.length} vídeos</p></div>
             </div>
-            <div class="playlist-videos-expand hidden"></div>
+            <div class="playlist-videos-expand"></div>
         `;
-
-        const header = row.querySelector(".playlist-header");
-        const bodyExpand = row.querySelector(".playlist-videos-expand");
-
-        // Evento de Expandir/Recolher
-        header.addEventListener("click", () => {
-            const isExpanded = header.getAttribute("data-expanded") === "true";
-            if(isExpanded) {
-                bodyExpand.classList.add("hidden");
-                header.setAttribute("data-expanded", "false");
-                header.querySelector(".action-text").innerText = "Clique para expandir";
-            } else {
-                // Se expandir, renderiza os cards de vídeo internos
-                bodyExpand.innerHTML = "";
-                listVideos.forEach((vid) => {
-                    const card = document.createElement("div");
-                    card.className = "video-card";
-                    card.innerHTML = `
-                        <img class="video-thumb" src="${vid.capa}" alt="${vid.título}">
-                        <div class="video-info">
-                            <div class="video-title">${vid.título}</div>
-                            <div class="video-tags">${vid.categoria} ${vid.subcategoria ? '| ' + vid.subcategoria : ''}</div>
-                        </div>
-                    `;
-                    // Ao clicar no vídeo, define a playlist ativa temporária para navegação de próximo/anterior
-                    card.addEventListener("click", () => {
-                        openPlayer(vid, listVideos);
-                    });
-                    bodyExpand.appendChild(card);
-                });
-
-                bodyExpand.classList.remove("hidden");
-                header.setAttribute("data-expanded", "true");
-                header.querySelector(".action-text").innerText = "Clique para ocultar";
-            }
+        
+        const container = row.querySelector(".playlist-videos-expand");
+        vids.forEach(vid => {
+            const card = document.createElement("div");
+            card.className = "video-card";
+            card.innerHTML = `<img src="${vid.capa}" class="video-thumb"><div class="video-info">${vid.título}</div>`;
+            card.onclick = () => openPlayer(vid, vids);
+            container.appendChild(card);
         });
-
         grid.appendChild(row);
     }
 }
 
-// Controle do Player de Vídeo
-function openPlayer(video, contextPlaylist) {
-    currentPlaylist = contextPlaylist;
-    currentVideoIndex = contextPlaylist.findIndex(v => v.link === video.link);
+function filterCat(c) { renderGrid(allVideos.filter(v => v.categoria === c), c); }
+function filterSub(c, s) { renderGrid(allVideos.filter(v => v.categoria === c && v.subcategoria === s), s); }
 
-    document.getElementById("video-modal").classList.remove("hidden");
-    loadVideoSrc(video);
-}
-
-function loadVideoSrc(video) {
+function openPlayer(video, playlist) {
+    currentPlaylist = playlist;
+    currentIndex = playlist.findIndex(v => v.link === video.link);
+    const modal = document.getElementById("video-modal");
+    const wrapper = document.getElementById("player-wrapper");
+    
+    modal.classList.remove("hidden");
     document.getElementById("modal-video-title").innerText = video.título;
-    
-    let embedUrl = video.link;
-    
-    // Configurações para garantir autoplay e habilitar API Javascript se for YouTube
-    if(embedUrl.includes("youtube.com") || embedUrl.includes("youtu.be")) {
-        const separator = embedUrl.includes("?") ? "&" : "?";
-        embedUrl = `${embedUrl}${separator}enablejsapi=1&autoplay=1&rel=0`;
-    }
 
-    const iframe = document.getElementById("video-player");
-    iframe.src = embedUrl;
-
-    // Destrói player antigo se houver e anexa o hook de evento de fim de vídeo do YouTube
-    setTimeout(() => {
-        try {
-            if (window.YT && YT.Player) {
-                youtubePlayer = new YT.Player('video-player', {
-                    events: {
-                        'onStateChange': (event) => {
-                            // YT.PlayerState.ENDED equivale a 0
-                            if (event.data === 0) {
-                                playNextVideo();
-                            }
-                        }
-                    }
-                });
-            }
-        } catch(e) {
-            console.log("Player não-Youtube ou API ainda carregando.");
-        }
-    }, 1000);
-}
-
-function playNextVideo() {
-    if(currentVideoIndex + 1 < currentPlaylist.length) {
-        currentVideoIndex++;
-        loadVideoSrc(currentPlaylist[currentVideoIndex]);
+    // Lógica para diferentes fontes
+    if (video.link.includes("youtube.com") || video.link.includes("youtu.be")) {
+        wrapper.innerHTML = `<iframe id="main-player" src="${video.link}?autoplay=1" allowfullscreen allow="autoplay"></iframe>`;
     } else {
-        alert("Você chegou ao fim desta playlist!");
-        closePlayer();
+        // Para Archive.org ou links diretos de MP4/WebM
+        wrapper.innerHTML = `
+            <video id="main-player" controls autoplay>
+                <source src="${video.link}" type="video/mp4">
+                Seu navegador não suporta este vídeo.
+            </video>`;
+        
+        // Autoplay para vídeos diretos (Archive.org etc)
+        const v = wrapper.querySelector('video');
+        v.onended = () => changeVideo(1);
     }
 }
 
-function playPrevVideo() {
-    if(currentVideoIndex - 1 >= 0) {
-        currentVideoIndex--;
-        loadVideoSrc(currentPlaylist[currentVideoIndex]);
+function changeVideo(step) {
+    currentIndex += step;
+    if(currentIndex >= 0 && currentIndex < currentPlaylist.length) {
+        openPlayer(currentPlaylist[currentIndex], currentPlaylist);
     }
 }
 
-function closePlayer() {
-    document.getElementById("video-modal").classList.add("hidden");
-    document.getElementById("video-player").src = ""; // Corta o áudio imediatamente
-    youtubePlayer = null;
-}
-
-function initPlayerEvents() {
-    document.getElementById("close-modal").addEventListener("click", closePlayer);
-    document.getElementById("next-video-btn").addEventListener("click", playNextVideo);
-    document.getElementById("prev-video-btn").addEventListener("click", playPrevVideo);
-    
-    // Fecha clicando fora da caixa do player
-    document.querySelector(".modal-backdrop").addEventListener("click", closePlayer);
+function setupModal() {
+    document.getElementById("close-modal").onclick = () => {
+        document.getElementById("video-modal").classList.add("hidden");
+        document.getElementById("player-wrapper").innerHTML = "";
+    };
+    document.getElementById("next-video-btn").onclick = () => changeVideo(1);
+    document.getElementById("prev-video-btn").onclick = () => changeVideo(-1);
 }
