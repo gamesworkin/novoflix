@@ -3,76 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meu Streaming Pessoal</title>
+    <title>CinePrivate V2 - Streaming Pessoal</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Ícones FontAwesome para o Player e Menu -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
 
-    <!-- TELA DE LOGIN -->
     <div id="login-screen" class="login-container">
         <div class="login-box">
-            <h2><i class="fa-solid fa-film"></i> CinePrivate</h2>
-            <p>Insira suas credenciais para acessar seus vídeos</p>
+            <h2><i class="fa-solid fa-bolt"></i> CinePrivate</h2>
             <form id="login-form">
                 <div class="input-group">
-                    <label for="username">Usuário</label>
-                    <input type="text" id="username" required autocomplete="off">
+                    <label>Usuário</label>
+                    <input type="text" id="username" required>
                 </div>
                 <div class="input-group">
-                    <label for="password">Senha</label>
+                    <label>Senha</label>
                     <input type="password" id="password" required>
                 </div>
                 <button type="submit" class="btn-login">Entrar</button>
-                <div id="login-error" class="error-message">Usuário ou senha incorretos!</div>
+                <div id="login-error" class="error-message">Acesso negado.</div>
             </form>
         </div>
     </div>
 
-    <!-- CONTEÚDO PRINCIPAL (OCULTO ANTES DO LOGIN) -->
     <div id="main-content" class="main-wrapper hidden">
         
-        <!-- MENU LATERAL -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <h3><i class="fa-solid fa-film"></i> Navegação</h3>
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-toggle" id="toggle-menu">
+                <i class="fa-solid fa-bars"></i>
             </div>
-            <nav id="sidebar-menu" class="menu-channels">
-                <!-- Categorias e Subcategorias injetadas via JS -->
-            </nav>
-            <button id="btn-logout" class="btn-logout"><i class="fa-solid fa-right-from-bracket"></i> Sair</button>
+            <div class="sidebar-content">
+                <div class="sidebar-header">
+                    <h3>Navegação</h3>
+                </div>
+                <nav id="sidebar-menu" class="menu-channels"></nav>
+                <button id="btn-logout" class="btn-logout"><i class="fa-solid fa-power-off"></i> <span>Sair</span></button>
+            </div>
         </aside>
 
-        <!-- ÁREA DOS VÍDEOS -->
         <main class="content-area">
             <header class="main-header">
-                <h1 id="current-view-title">Todos os Vídeos</h1>
+                <h1 id="current-view-title">Início</h1>
             </header>
-            
-            <!-- Grid de Categorias/Playlists -->
-            <section id="categories-grid" class="categories-grid">
-                <!-- Playlists em formato de card expandível injetadas via JS -->
-            </section>
+            <section id="categories-grid" class="categories-grid"></section>
         </main>
     </div>
 
-    <!-- MODAL DO PLAYER DE VÍDEO (QUASE TELA CHEIA) -->
     <div id="video-modal" class="video-modal hidden">
         <div class="modal-backdrop"></div>
         <div class="modal-content">
             <button id="close-modal" class="close-btn"><i class="fa-solid fa-xmark"></i></button>
             
-            <div class="player-container">
-                <!-- O iframe do YouTube/Embed entra aqui -->
-                <iframe id="video-player" src="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-            </div>
+            <div id="player-wrapper" class="player-container">
+                </div>
 
             <div class="player-controls-bar">
-                <h3 id="modal-video-title">Título do Vídeo</h3>
+                <h3 id="modal-video-title">Título</h3>
                 <div class="controls-buttons">
-                    <button id="prev-video-btn" class="control-btn" title="Anterior"><i class="fa-solid fa-backward"></i></button>
-                    <button id="next-video-btn" class="control-btn" title="Próximo"><i class="fa-solid fa-forward"></i></button>
+                    <button id="prev-video-btn" class="control-btn"><i class="fa-solid fa-backward"></i></button>
+                    <button id="next-video-btn" class="control-btn"><i class="fa-solid fa-forward"></i></button>
                 </div>
             </div>
         </div>
