@@ -2,12 +2,29 @@ const CREDENTIALS = { user: "admin", pass: "admin123" };
 let allVideos = [];
 let currentPlaylist = [];
 let currentIndex = -1;
+let activeFilterVideos = []; // Guarda os vídeos da categoria/subcategoria selecionada
 
 document.addEventListener("DOMContentLoaded", () => {
     // Inicialização do Menu Retrátil
     const sidebar = document.getElementById("sidebar");
     document.getElementById("toggle-menu").addEventListener("click", () => {
         sidebar.classList.toggle("collapsed");
+    });
+
+    // Evento do campo de pesquisa (tempo real)
+    document.getElementById("search-input").addEventListener("input", (e) => {
+        const term = e.target.value.toLowerCase().trim();
+        
+        // Filtra a partir dos vídeos da categoria que já está ativa em tela
+        const filtered = activeFilterVideos.filter(v => 
+            v.título.toLowerCase().includes(term) || 
+            v.categoria.toLowerCase().includes(term) || 
+            (v.subcategoria && v.subcategoria.toLowerCase().includes(term))
+        );
+        
+        // Renderiza a lista filtrada mantendo o título da tela ativa
+        const currentTitle = document.getElementById("current-view-title").innerText;
+        renderGrid(filtered, currentTitle, false);
     });
 
     // Evento de Login
@@ -37,9 +54,9 @@ async function initApp() {
     try {
         const res = await fetch('videos.json');
         allVideos = await res.json();
+        activeFilterVideos = allVideos;
         
         buildSidebar(allVideos);
-        // Inicializa a grade com todos os blocos fechados (apenas as capas iniciais das playlists)
         renderGrid(allVideos, 'Início');
         setupModal();
     } catch (error) {
@@ -52,7 +69,7 @@ function buildSidebar(videos) {
     const menu = document.getElementById("sidebar-menu");
     const cats = [...new Set(videos.map(v => v.categoria))];
     
-    menu.innerHTML = `<div class="category-title-link" onclick="renderGrid(allVideos, 'Início')"><i class="fa-solid fa-house"></i> <span>Início</span></div>`;
+    menu.innerHTML = `<div class="category-title-link" onclick="resetToHome()"><i class="fa-solid fa-house"></i> <span>Início</span></div>`;
     
     cats.forEach(cat => {
         const subCats = [...new Set(videos.filter(v => v.categoria === cat).map(v => v.subcategoria))];
@@ -66,11 +83,22 @@ function buildSidebar(videos) {
     });
 }
 
-// Renderiza as Playlists baseadas nos filtros. Por padrão, nenhuma começa expandida.
-function renderGrid(videos, title = "Vídeos") {
+function resetToHome() {
+    document.getElementById("search-input").value = "";
+    activeFilterVideos = allVideos;
+    renderGrid(allVideos, 'Início');
+}
+
+// Renderiza as Playlists baseadas nos filtros.
+// O parâmetro 'updateActive' impede que a busca por texto quebre a sua navegação de categoria lateral.
+function renderGrid(videos, title = "Vídeos", updateActive = true) {
     document.getElementById("current-view-title").innerText = title;
     const grid = document.getElementById("categories-grid");
     grid.innerHTML = "";
+
+    if (updateActive) {
+        activeFilterVideos = videos;
+    }
 
     // Agrupa os itens por Categoria e Subcategoria
     const groups = {};
@@ -80,7 +108,7 @@ function renderGrid(videos, title = "Vídeos") {
         groups[k].push(v);
     });
 
-    // Cria as seções das Playlists. Apenas a capa do primeiro vídeo fica visível inicialmente.
+    // Cria as seções das Playlists fechadas (Apenas a capa visível).
     for(let key in groups) {
         const vids = groups[key];
         const row = document.createElement("div");
@@ -100,7 +128,6 @@ function renderGrid(videos, title = "Vídeos") {
         const header = row.querySelector(".playlist-header");
         const container = row.querySelector(".playlist-videos-expand");
         
-        // Controla a expansão manual ao clicar na capa/cabeçalho
         header.addEventListener("click", () => {
             const isExpanded = header.getAttribute("data-expanded") === "true";
             
@@ -110,7 +137,6 @@ function renderGrid(videos, title = "Vídeos") {
                 header.setAttribute("data-expanded", "false");
                 header.querySelector(".status-icon").innerHTML = 'Clique para abrir <i class="fa-solid fa-chevron-down"></i>';
             } else {
-                // Injeta os vídeos somente ao expandir, mantendo a tela limpa
                 container.innerHTML = "";
                 vids.forEach(vid => {
                     const card = document.createElement("div");
@@ -120,7 +146,7 @@ function renderGrid(videos, title = "Vídeos") {
                         <div class="video-info">${vid.título}</div>
                     `;
                     card.onclick = (e) => {
-                        e.stopPropagation(); // Evita fechar a lista ao clicar no vídeo
+                        e.stopPropagation();
                         openPlayer(vid, vids);
                     };
                     container.appendChild(card);
@@ -135,11 +161,17 @@ function renderGrid(videos, title = "Vídeos") {
     }
 }
 
-// Filtros do menu lateral
-function filterCat(c) { renderGrid(allVideos.filter(v => v.categoria === c), c); }
-function filterSub(c, s) { renderGrid(allVideos.filter(v => v.categoria === c && v.subcategoria === s), s); }
+// Filtros do menu lateral (Limpam a caixa de texto para manter a consistência)
+function filterCat(c) { 
+    document.getElementById("search-input").value = "";
+    renderGrid(allVideos.filter(v => v.categoria === c), c); 
+}
+function filterSub(c, s) { 
+    document.getElementById("search-input").value = "";
+    renderGrid(allVideos.filter(v => v.categoria === c && v.subcategoria === s), s); 
+}
 
-// Gerenciamento e execução do player de vídeo (YouTube Embed ou Link Direto/Archive)
+// Gerenciamento e execução do player de vídeo
 function openPlayer(video, playlist) {
     currentPlaylist = playlist;
     currentIndex = playlist.findIndex(v => v.link === video.link);
@@ -150,17 +182,14 @@ function openPlayer(video, playlist) {
     document.getElementById("modal-video-title").innerText = video.título;
 
     if (video.link.includes("youtube.com") || video.link.includes("youtu.be")) {
-        // Modo YouTube Iframe
         wrapper.innerHTML = `<iframe id="main-player" src="${video.link}?autoplay=1" allowfullscreen allow="autoplay"></iframe>`;
     } else {
-        // Modo Vídeo Nativo HTML5 (Archive.org, MP4, etc.)
         wrapper.innerHTML = `
             <video id="main-player" controls autoplay>
                 <source src="${video.link}" type="video/mp4">
                 Seu navegador não suporta este vídeo.
             </video>`;
         
-        // Evento de reprodução contínua automática para vídeos nativos
         const nativeVideo = wrapper.querySelector('video');
         nativeVideo.onended = () => changeVideo(1);
     }
