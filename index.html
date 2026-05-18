@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CinePrivate V3 - Streaming Pessoal</title>
+    <title>CinePrivate V4 - Streaming Pessoal</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -47,9 +47,18 @@
 
         <!-- ÁREA DOS VÍDEOS -->
         <main class="content-area">
+            <!-- NOVA BARRA DE PESQUISA SUPERIOR -->
+            <div class="top-search-bar">
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="search-input" placeholder="Pesquisar por título, categoria ou subcategoria...">
+                </div>
+            </div>
+
             <header class="main-header">
                 <h1 id="current-view-title">Início</h1>
             </header>
+            
             <!-- Onde ficam listadas as capas iniciais das categorias -->
             <section id="categories-grid" class="categories-grid"></section>
         </main>
