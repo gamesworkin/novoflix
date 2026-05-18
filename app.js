@@ -2,32 +2,28 @@ const CREDENTIALS = { user: "admin", pass: "admin123" };
 let allVideos = [];
 let currentPlaylist = [];
 let currentIndex = -1;
-let activeFilterVideos = []; // Guarda os vídeos da categoria/subcategoria selecionada
+let activeFilterVideos = []; 
+
+// Função de segurança para extrair o título independente de acentos no JSON
+function getSafeTitle(video) {
+    return video.título || video.titulo || "Sem Título";
+}
 
 document.addEventListener("DOMContentLoaded", () => {
-    // Inicialização do Menu Retrátil
     const sidebar = document.getElementById("sidebar");
-    document.getElementById("toggle-menu").addEventListener("click", () => {
-        sidebar.classList.toggle("collapsed");
-    });
+    document.getElementById("toggle-menu").addEventListener("click", () => sidebar.classList.toggle("collapsed"));
 
-    // Evento do campo de pesquisa (tempo real)
     document.getElementById("search-input").addEventListener("input", (e) => {
         const term = e.target.value.toLowerCase().trim();
-        
-        // Filtra a partir dos vídeos da categoria que já está ativa em tela
-        const filtered = activeFilterVideos.filter(v => 
-            v.título.toLowerCase().includes(term) || 
-            v.categoria.toLowerCase().includes(term) || 
-            (v.subcategoria && v.subcategoria.toLowerCase().includes(term))
-        );
-        
-        // Renderiza a lista filtrada mantendo o título da tela ativa
-        const currentTitle = document.getElementById("current-view-title").innerText;
-        renderGrid(filtered, currentTitle, false);
+        const filtered = activeFilterVideos.filter(v => {
+            const title = getSafeTitle(v).toLowerCase();
+            const cat = (v.categoria || "").toLowerCase();
+            const sub = (v.subcategoria || "").toLowerCase();
+            return title.includes(term) || cat.includes(term) || sub.includes(term);
+        });
+        renderGrid(filtered, document.getElementById("current-view-title").innerText, false);
     });
 
-    // Evento de Login
     document.getElementById("login-form").addEventListener("submit", (e) => {
         e.preventDefault();
         if(document.getElementById("username").value === CREDENTIALS.user && 
@@ -52,7 +48,12 @@ async function initApp() {
     document.getElementById("main-content").classList.remove("hidden");
     
     try {
-        const res = await fetch('videos.json');
+        const pathName = window.location.pathname;
+        const basePath = pathName.substring(0, pathName.lastIndexOf('/')) + '/';
+        const jsonUrl = window.location.origin + basePath + 'videos.json';
+
+        // Cache busting: adiciona um número aleatório para garantir que o navegador baixe o JSON novo
+        const res = await fetch(jsonUrl + "?t=" + new Date().getTime());
         allVideos = await res.json();
         activeFilterVideos = allVideos;
         
@@ -64,15 +65,13 @@ async function initApp() {
     }
 }
 
-// Monta a estrutura de pastas do menu lateral esquerdo
 function buildSidebar(videos) {
     const menu = document.getElementById("sidebar-menu");
-    const cats = [...new Set(videos.map(v => v.categoria))];
-    
+    const cats = [...new Set(videos.map(v => v.categoria).filter(Boolean))];
     menu.innerHTML = `<div class="category-title-link" onclick="resetToHome()"><i class="fa-solid fa-house"></i> <span>Início</span></div>`;
     
     cats.forEach(cat => {
-        const subCats = [...new Set(videos.filter(v => v.categoria === cat).map(v => v.subcategoria))];
+        const subCats = [...new Set(videos.filter(v => v.categoria === cat).map(v => v.subcategoria).filter(Boolean))];
         let html = `<div class="category-title-link" onclick="filterCat('${cat}')"><i class="fa-solid fa-folder"></i> <span>${cat}</span></div>`;
         html += `<ul class="subcategory-list">`;
         subCats.forEach(sub => {
@@ -89,18 +88,13 @@ function resetToHome() {
     renderGrid(allVideos, 'Início');
 }
 
-// Renderiza as Playlists baseadas nos filtros.
-// O parâmetro 'updateActive' impede que a busca por texto quebre a sua navegação de categoria lateral.
 function renderGrid(videos, title = "Vídeos", updateActive = true) {
     document.getElementById("current-view-title").innerText = title;
     const grid = document.getElementById("categories-grid");
     grid.innerHTML = "";
 
-    if (updateActive) {
-        activeFilterVideos = videos;
-    }
+    if (updateActive) activeFilterVideos = videos;
 
-    // Agrupa os itens por Categoria e Subcategoria
     const groups = {};
     videos.forEach(v => {
         const k = `${v.categoria}${v.subcategoria ? ' > ' + v.subcategoria : ''}`;
@@ -108,7 +102,6 @@ function renderGrid(videos, title = "Vídeos", updateActive = true) {
         groups[k].push(v);
     });
 
-    // Cria as seções das Playlists fechadas (Apenas a capa visível).
     for(let key in groups) {
         const vids = groups[key];
         const row = document.createElement("div");
@@ -130,7 +123,6 @@ function renderGrid(videos, title = "Vídeos", updateActive = true) {
         
         header.addEventListener("click", () => {
             const isExpanded = header.getAttribute("data-expanded") === "true";
-            
             if(isExpanded) {
                 container.classList.add("hidden");
                 container.innerHTML = "";
@@ -141,9 +133,10 @@ function renderGrid(videos, title = "Vídeos", updateActive = true) {
                 vids.forEach(vid => {
                     const card = document.createElement("div");
                     card.className = "video-card";
+                    // CORREÇÃO: Chama getSafeTitle para evitar o undefined
                     card.innerHTML = `
                         <img src="${vid.capa}" class="video-thumb">
-                        <div class="video-info">${vid.título}</div>
+                        <div class="video-info">${getSafeTitle(vid)}</div>
                     `;
                     card.onclick = (e) => {
                         e.stopPropagation();
@@ -156,12 +149,10 @@ function renderGrid(videos, title = "Vídeos", updateActive = true) {
                 header.querySelector(".status-icon").innerHTML = 'Clique para fechar <i class="fa-solid fa-chevron-up"></i>';
             }
         });
-
         grid.appendChild(row);
     }
 }
 
-// Filtros do menu lateral (Limpam a caixa de texto para manter a consistência)
 function filterCat(c) { 
     document.getElementById("search-input").value = "";
     renderGrid(allVideos.filter(v => v.categoria === c), c); 
@@ -171,27 +162,27 @@ function filterSub(c, s) {
     renderGrid(allVideos.filter(v => v.categoria === c && v.subcategoria === s), s); 
 }
 
-// Gerenciamento e execução do player de vídeo
 function openPlayer(video, playlist) {
     currentPlaylist = playlist;
     currentIndex = playlist.findIndex(v => v.link === video.link);
     const modal = document.getElementById("video-modal");
     const wrapper = document.getElementById("player-wrapper");
-    
     modal.classList.remove("hidden");
-    document.getElementById("modal-video-title").innerText = video.título;
+    // CORREÇÃO: Chama getSafeTitle aqui também
+    document.getElementById("modal-video-title").innerText = getSafeTitle(video);
 
-    if (video.link.includes("youtube.com") || video.link.includes("youtu.be")) {
-        wrapper.innerHTML = `<iframe id="main-player" src="${video.link}?autoplay=1" allowfullscreen allow="autoplay"></iframe>`;
+    const url = video.link.trim();
+    const isDirectFile = /\.(mp4|webm|ogg|mov|m4v)($|\?)/i.test(url);
+
+    if (isDirectFile) {
+        wrapper.innerHTML = `<video id="main-player" controls autoplay><source src="${url}" type="video/mp4"></video>`;
+        wrapper.querySelector('video').onended = () => changeVideo(1);
     } else {
-        wrapper.innerHTML = `
-            <video id="main-player" controls autoplay>
-                <source src="${video.link}" type="video/mp4">
-                Seu navegador não suporta este vídeo.
-            </video>`;
-        
-        const nativeVideo = wrapper.querySelector('video');
-        nativeVideo.onended = () => changeVideo(1);
+        let finalUrl = url;
+        if (url.includes("youtube.com") || url.includes("youtu.be")) {
+            finalUrl += (url.includes("?") ? "&" : "?") + "autoplay=1";
+        }
+        wrapper.innerHTML = `<iframe id="main-player" src="${finalUrl}" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
     }
 }
 
@@ -200,7 +191,7 @@ function changeVideo(step) {
     if(currentIndex >= 0 && currentIndex < currentPlaylist.length) {
         openPlayer(currentPlaylist[currentIndex], currentPlaylist);
     } else if (currentIndex >= currentPlaylist.length) {
-        alert("Fim da playlist atingido!");
+        alert("Fim da playlist!");
         closeModal();
     }
 }
